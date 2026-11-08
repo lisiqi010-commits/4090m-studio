@@ -56,9 +56,18 @@ namespace RtxHub
                         if (Visible && WindowState == FormWindowState.Normal) lastVisibleBounds = Bounds;
                         return;
                     }
-                    trayIcon.Visible = true;
-                    ShowInTaskbar = false;
-                    Hide();
+                    BeginInvoke((Action)delegate
+                    {
+                        if (IsDisposed || Disposing || restoringFromTray || WindowState != FormWindowState.Minimized) return;
+                        restoringFromTray = true;
+                        try
+                        {
+                            trayIcon.Visible = true;
+                            Hide();
+                            WindowState = FormWindowState.Normal;
+                        }
+                        finally { restoringFromTray = false; }
+                    });
                 };
             }
 
@@ -304,10 +313,10 @@ namespace RtxHub
             restoringFromTray = true;
             try
             {
-                // Restoring the state precedes handle recreation by ShowInTaskbar.
-                // Resize events during that recreation must not hide us again.
+                // Show the hidden form before resetting its cached minimized state.
+                // Keep its native handle stable throughout hide/restore cycles.
+                Show();
                 WindowState = FormWindowState.Normal;
-                ShowInTaskbar = true;
                 Rectangle bounds = lastVisibleBounds.IsEmpty ? Bounds : lastVisibleBounds;
                 bool onScreen = false;
                 foreach (Screen screen in Screen.AllScreens)

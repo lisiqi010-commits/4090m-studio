@@ -172,7 +172,7 @@ public static class SimpleHomeTests
         SimpleActions.Pending = false;
         using (SimpleHome form = new SimpleHome(false))
         {
-            form.ShowInTaskbar = false;
+            form.ShowInTaskbar = true;
             form.StartPosition = FormStartPosition.Manual;
             form.Location = new Point(-32000, -32000);
             form.Show();
@@ -199,10 +199,12 @@ public static class SimpleHomeTests
             Check(SimpleActions.Selection == ownExecutable, "Selected file reaches backend unchanged.");
             Check(((Label)Field(form, "selected")).Text.EndsWith("SimpleHomeTests.exe"), "Selected filename remains visible.");
             Check(status.Text == "已启动。", "Launch outcome is shown without keeping form busy.");
+            IntPtr originalHandle = form.Handle;
             form.WindowState = FormWindowState.Minimized;
             Application.DoEvents();
             NotifyIcon tray = (NotifyIcon)Field(form, "trayIcon");
-            Check(tray.Visible && !form.Visible && !form.ShowInTaskbar, "Minimize hides to a visible tray icon.");
+            Check(tray.Visible && !form.Visible, "Minimize hides to a visible tray icon.");
+            Check(form.Handle == originalHandle, "Hiding to tray preserves the native window handle.");
             Check(((System.Windows.Forms.Timer)Field(form, "pendingTimer")).Enabled, "Tray mode keeps pending cancellation active.");
             ContextMenuStrip menu = (ContextMenuStrip)Field(form, "trayMenu");
             Check(menu.Items.Count == 2 && menu.Items[0].Text == "打开主窗口" && menu.Items[1].Text == "退出软件", "Chinese tray menu provides restore and exit.");
@@ -215,6 +217,7 @@ public static class SimpleHomeTests
                 form.WindowState=FormWindowState.Minimized;Application.DoEvents();
                 menu.Items[0].PerformClick();Application.DoEvents();
                 Check(form.Visible&&form.ShowInTaskbar&&!tray.Visible&&Screen.FromControl(form).WorkingArea.IntersectsWith(form.Bounds),"Repeated tray restoration remains visible.");
+                Check(form.Handle==originalHandle,"Repeated tray cycles keep the notification owner's handle stable.");
             }
         }
     }
