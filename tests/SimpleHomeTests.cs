@@ -211,6 +211,12 @@ public static class SimpleHomeTests
             menu.Items[0].PerformClick();
             Application.DoEvents();
             Check(form.Visible && form.ShowInTaskbar && form.WindowState == FormWindowState.Normal && !tray.Visible, "Tray open restores the window and removes hidden icon.");
+            form.WindowState=FormWindowState.Minimized;Application.DoEvents();
+            typeof(NotifyIcon).GetMethod("OnMouseClick",BindingFlags.NonPublic|BindingFlags.Instance).Invoke(tray,new object[]{new MouseEventArgs(MouseButtons.Right,1,0,0,0)});
+            Check(!form.Visible&&tray.Visible,"Right click keeps the window hidden for the context menu.");
+            typeof(NotifyIcon).GetMethod("OnMouseClick",BindingFlags.NonPublic|BindingFlags.Instance).Invoke(tray,new object[]{new MouseEventArgs(MouseButtons.Left,1,0,0,0)});
+            Application.DoEvents();
+            Check(form.Visible&&!tray.Visible&&form.Handle==originalHandle,"A single left click restores the window with its original handle.");
             Check(Screen.FromControl(form).WorkingArea.IntersectsWith(form.Bounds), "Restored window is on screen, not at Windows minimized parking coordinates.");
             for(int cycle=0;cycle<3;cycle++)
             {

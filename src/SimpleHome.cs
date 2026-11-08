@@ -48,6 +48,10 @@ namespace RtxHub
                 trayMenu.Items.Add("退出软件", null, delegate { Close(); });
                 trayIcon = new NotifyIcon { Text = "4090M Studio", Icon = Icon, ContextMenuStrip = trayMenu, Visible = false };
                 trayIcon.DoubleClick += delegate { RestoreFromTray(); };
+                trayIcon.MouseClick += delegate(object sender, MouseEventArgs args)
+                {
+                    if (args.Button == MouseButtons.Left) RestoreFromTray();
+                };
                 Resize += delegate
                 {
                     if (restoringFromTray) return;
