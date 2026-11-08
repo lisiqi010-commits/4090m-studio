@@ -1,0 +1,13 @@
+mpv first-party GitHub CI Windows x86_64 mingw full build
+Asset: mpv-v0.42.0-dev-g55d3feb45-42342927321-x86_64-w64-mingw32-full.zip
+Release: https://github.com/mpv-player/mpv/releases/tag/git-release
+Download: https://github.com/mpv-player/mpv/releases/download/git-release/mpv-v0.42.0-dev-g55d3feb45-42342927321-x86_64-w64-mingw32-full.zip
+SHA256: d694c039f2b8be41e876acbcd9f3e38f87f9320297eeec2106a79bc3f769bbe8
+Source commit: 55d3feb45 (full commit id discoverable via release and --version)
+mpv source: https://github.com/mpv-player/mpv/tree/55d3feb45
+mpv source archive: https://github.com/mpv-player/mpv/archive/55d3feb45.tar.gz
+Build dependencies and scripts: https://github.com/mpv-player/mpv/tree/55d3feb45/ci
+Installation listing: https://mpv.io/installation/
+This binary is a development CI build; not an NVIDIA product.
+Bundled license files remain with the extracted player; see LICENSE.GPL.
+
