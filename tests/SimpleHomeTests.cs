@@ -199,6 +199,23 @@ public static class SimpleHomeTests
             Check(SimpleActions.Selection == ownExecutable, "Selected file reaches backend unchanged.");
             Check(((Label)Field(form, "selected")).Text.EndsWith("SimpleHomeTests.exe"), "Selected filename remains visible.");
             Check(status.Text == "已启动。", "Launch outcome is shown without keeping form busy.");
+            form.WindowState = FormWindowState.Minimized;
+            Application.DoEvents();
+            NotifyIcon tray = (NotifyIcon)Field(form, "trayIcon");
+            Check(tray.Visible && !form.Visible && !form.ShowInTaskbar, "Minimize hides to a visible tray icon.");
+            Check(((System.Windows.Forms.Timer)Field(form, "pendingTimer")).Enabled, "Tray mode keeps pending cancellation active.");
+            ContextMenuStrip menu = (ContextMenuStrip)Field(form, "trayMenu");
+            Check(menu.Items.Count == 2 && menu.Items[0].Text == "打开主窗口" && menu.Items[1].Text == "退出软件", "Chinese tray menu provides restore and exit.");
+            menu.Items[0].PerformClick();
+            Application.DoEvents();
+            Check(form.Visible && form.ShowInTaskbar && form.WindowState == FormWindowState.Normal && !tray.Visible, "Tray open restores the window and removes hidden icon.");
+            Check(Screen.FromControl(form).WorkingArea.IntersectsWith(form.Bounds), "Restored window is on screen, not at Windows minimized parking coordinates.");
+            for(int cycle=0;cycle<3;cycle++)
+            {
+                form.WindowState=FormWindowState.Minimized;Application.DoEvents();
+                menu.Items[0].PerformClick();Application.DoEvents();
+                Check(form.Visible&&form.ShowInTaskbar&&!tray.Visible&&Screen.FromControl(form).WorkingArea.IntersectsWith(form.Bounds),"Repeated tray restoration remains visible.");
+            }
         }
     }
 #endif

@@ -21,7 +21,11 @@ namespace RtxHub
         readonly Label spinner;
         readonly Timer pendingTimer;
         readonly Timer animationTimer;
+        readonly NotifyIcon trayIcon;
+        readonly ContextMenuStrip trayMenu;
         bool busy;
+        bool restoringFromTray;
+        Rectangle lastVisibleBounds;
         int animationFrame;
 
         public SimpleHome(bool renderOnly)
@@ -37,6 +41,26 @@ namespace RtxHub
             AutoScaleMode = AutoScaleMode.Dpi;
             DoubleBuffered = true;
             AllowDrop = true;
+            if (!renderOnly)
+            {
+                trayMenu = new ContextMenuStrip();
+                trayMenu.Items.Add("打开主窗口", null, delegate { RestoreFromTray(); });
+                trayMenu.Items.Add("退出软件", null, delegate { Close(); });
+                trayIcon = new NotifyIcon { Text = "4090M Studio", Icon = Icon, ContextMenuStrip = trayMenu, Visible = false };
+                trayIcon.DoubleClick += delegate { RestoreFromTray(); };
+                Resize += delegate
+                {
+                    if (restoringFromTray) return;
+                    if (WindowState != FormWindowState.Minimized)
+                    {
+                        if (Visible && WindowState == FormWindowState.Normal) lastVisibleBounds = Bounds;
+                        return;
+                    }
+                    trayIcon.Visible = true;
+                    ShowInTaskbar = false;
+                    Hide();
+                };
+            }
 
             TableLayoutPanel shell = new TableLayoutPanel();
             shell.Dock = DockStyle.Fill;
@@ -133,6 +157,7 @@ namespace RtxHub
             {
                 if (!busy) return;
                 args.Cancel = true;
+                RestoreFromTray();
                 ShowStatus("正在完成操作，完成后即可关闭。");
             };
         }
@@ -273,12 +298,43 @@ namespace RtxHub
             if (status.Text != display) status.Text = display;
         }
 
+        void RestoreFromTray()
+        {
+            if (renderOnly || IsDisposed || Disposing) return;
+            restoringFromTray = true;
+            try
+            {
+                // Restoring the state precedes handle recreation by ShowInTaskbar.
+                // Resize events during that recreation must not hide us again.
+                WindowState = FormWindowState.Normal;
+                ShowInTaskbar = true;
+                Rectangle bounds = lastVisibleBounds.IsEmpty ? Bounds : lastVisibleBounds;
+                bool onScreen = false;
+                foreach (Screen screen in Screen.AllScreens)
+                    if (screen.WorkingArea.IntersectsWith(bounds)) { onScreen = true; break; }
+                if (!onScreen)
+                {
+                    Rectangle area = Screen.PrimaryScreen.WorkingArea;
+                    bounds = new Rectangle(area.Left + Math.Max(0,(area.Width-Width)/2),area.Top + Math.Max(0,(area.Height-Height)/2),Width,Height);
+                }
+                Bounds = bounds;
+                Show();
+                BringToFront();
+                Activate();
+                lastVisibleBounds = Bounds;
+                if (trayIcon != null && Visible) trayIcon.Visible = false;
+            }
+            finally { restoringFromTray = false; }
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
                 if (pendingTimer != null) pendingTimer.Dispose();
                 if (animationTimer != null) animationTimer.Dispose();
+                if (trayIcon != null) { trayIcon.Visible = false; trayIcon.Dispose(); }
+                if (trayMenu != null) trayMenu.Dispose();
             }
             base.Dispose(disposing);
         }
