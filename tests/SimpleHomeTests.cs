@@ -225,6 +225,19 @@ public static class SimpleHomeTests
                 Check(form.Visible&&form.ShowInTaskbar&&!tray.Visible&&Screen.FromControl(form).WorkingArea.IntersectsWith(form.Bounds),"Repeated tray restoration remains visible.");
                 Check(form.Handle==originalHandle,"Repeated tray cycles keep the notification owner's handle stable.");
             }
+            form.Close();Application.DoEvents();
+            Check(!form.IsDisposed&&!form.Visible&&tray.Visible,"Title-bar close hides to tray without exiting.");
+            menu.Items[0].PerformClick();Application.DoEvents();
+            object[] keyArgs={Message.Create(form.Handle,0x104,IntPtr.Zero,IntPtr.Zero),Keys.Alt|Keys.F4};
+            form.GetType().GetMethod("ProcessCmdKey",BindingFlags.NonPublic|BindingFlags.Instance).Invoke(form,keyArgs);
+            Check(form.IsDisposed,"Alt+F4 explicitly exits the application.");
+        }
+        using(var startup=new SimpleHome(false,true))
+        {
+            startup.Show();Application.DoEvents();
+            Check(!startup.Visible&&((NotifyIcon)Field(startup,"trayIcon")).Visible,"Startup launch hides in tray.");
+            ((ContextMenuStrip)Field(startup,"trayMenu")).Items[1].PerformClick();
+            Check(startup.IsDisposed,"Tray exit explicitly closes even while hidden.");
         }
     }
 #endif

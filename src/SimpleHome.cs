@@ -24,11 +24,13 @@ namespace RtxHub
         readonly NotifyIcon trayIcon;
         readonly ContextMenuStrip trayMenu;
         bool busy;
+        bool exitRequested;
         bool restoringFromTray;
         Rectangle lastVisibleBounds;
         int animationFrame;
 
-        public SimpleHome(bool renderOnly)
+        public SimpleHome(bool renderOnly) : this(renderOnly, false) { }
+        public SimpleHome(bool renderOnly, bool startInTray)
         {
             this.renderOnly = renderOnly;
             Text = "4090M Studio";
@@ -45,7 +47,7 @@ namespace RtxHub
             {
                 trayMenu = new ContextMenuStrip();
                 trayMenu.Items.Add("打开主窗口", null, delegate { RestoreFromTray(); });
-                trayMenu.Items.Add("退出软件", null, delegate { Close(); });
+                trayMenu.Items.Add("退出软件", null, delegate { RequestExit(); });
                 trayIcon = new NotifyIcon { Text = "4090M Studio", Icon = Icon, ContextMenuStrip = trayMenu, Visible = false };
                 trayIcon.DoubleClick += delegate { RestoreFromTray(); };
                 trayIcon.MouseClick += delegate(object sender, MouseEventArgs args)
@@ -165,14 +167,32 @@ namespace RtxHub
             open.AllowDrop = true;
             open.DragEnter += OnFileDragEnter;
             open.DragDrop += OnFileDrop;
-            Shown += delegate { if (!renderOnly) pendingTimer.Start(); };
+            Shown += delegate { if (!renderOnly) { pendingTimer.Start(); if(startInTray) WindowState=FormWindowState.Minimized; } };
             FormClosing += delegate(object sender, FormClosingEventArgs args)
             {
-                if (!busy) return;
-                args.Cancel = true;
-                RestoreFromTray();
-                ShowStatus("正在完成操作，完成后即可关闭。");
+                if (args.CloseReason == CloseReason.WindowsShutDown) return;
+                if (busy)
+                {
+                    args.Cancel = true;
+                    exitRequested = false;
+                    RestoreFromTray();
+                    ShowStatus("正在完成操作，完成后即可关闭。");
+                    return;
+                }
+                if (!renderOnly && args.CloseReason == CloseReason.UserClosing && !exitRequested)
+                {
+                    args.Cancel = true;
+                    WindowState = FormWindowState.Minimized;
+                    return;
+                }
             };
+        }
+
+        void RequestExit() { exitRequested = true; Close(); }
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == (Keys.Alt | Keys.F4) && !renderOnly) { RequestExit(); return true; }
+            return base.ProcessCmdKey(ref msg, keyData);
         }
 
         static Label MakeLabel(string text, float size, Color color, bool bold)

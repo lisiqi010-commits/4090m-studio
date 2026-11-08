@@ -58,7 +58,7 @@ namespace RtxHub
                     }
                     return 0;
                 }
-                Application.Run(new SimpleHome(false));
+                Application.Run(new SimpleHome(false, Array.IndexOf(args,"--tray")>=0));
                 return 0;
             }
             catch (Exception ex)
