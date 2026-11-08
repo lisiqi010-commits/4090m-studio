@@ -49,6 +49,13 @@ namespace RtxHub
                         using(Bitmap bitmap=new Bitmap(form.Width,form.Height))
                         {form.DrawToBitmap(bitmap,new Rectangle(Point.Empty,form.Size));bitmap.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"ui-sources.png"));}
                     }
+                    using (Form form = GameLaunchOptions.CreatePreview())
+                    {
+                        form.StartPosition=FormStartPosition.Manual;form.Location=new Point(-32000,-32000);
+                        form.Show();Application.DoEvents();form.PerformLayout();Application.DoEvents();
+                        using(Bitmap bitmap=new Bitmap(form.Width,form.Height))
+                        {form.DrawToBitmap(bitmap,new Rectangle(Point.Empty,form.Size));bitmap.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"ui-game-options.png"));}
+                    }
                     return 0;
                 }
                 Application.Run(new SimpleHome(false));

@@ -10,10 +10,13 @@ internal sealed class SimpleBackendFixture : ISimpleActionsBackend
     internal readonly HashSet<string> Running=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     internal readonly HashSet<string> Residual=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     internal readonly List<string> Ensured=new List<string>(),Launched=new List<string>(),Restored=new List<string>(),Videos=new List<string>();
-    internal bool FailPrepare,FailEnsure,FailLaunch;internal string FailRestore,VideoPlayer;
+    internal bool FailPrepare,FailEnsure,FailLaunch,RejectFrameGen;internal string FailRestore,VideoPlayer;
+    internal readonly List<int> Multipliers=new List<int>();
     internal int PrepareCount,StopCalls;
     public string Prepare(Action<string> progress){PrepareCount++;if(FailPrepare)throw new InvalidOperationException("fixture package failure");return "prepared";}
     public string EnsureGame(string exe){if(FailEnsure)throw new InvalidOperationException("fixture install failure");Managed.Add(exe);Ensured.Add(exe);return "installed";}
+    public void ValidateFrameGeneration(string exe,int multiplier){if(multiplier>1&&RejectFrameGen)throw new InvalidOperationException("unsupported fixture FG");}
+    public string ConfigureFrameGeneration(string exe,int multiplier,Action<string> progress){Multipliers.Add(multiplier);return "FG request recorded";}
     public void LaunchGame(string exe){if(FailLaunch)throw new InvalidOperationException("fixture launch failure");Launched.Add(exe);}
     public SimpleVideoLaunch PlayVideo(string file){Videos.Add(file);Managed.Add(VideoPlayer);return new SimpleVideoLaunch{Executable=VideoPlayer,Message="video requested"};}
     public SimpleVideoLaunch PlayVideos(string[] files){foreach(string file in files)Videos.Add(file);Managed.Add(VideoPlayer);return new SimpleVideoLaunch{Executable=VideoPlayer,Message="playlist requested"};}
@@ -52,6 +55,13 @@ internal static class SimpleActionsTests
             Assert(b.PrepareCount==beforePrepare,"invalid playlist is rejected before package writes");
             Throws(delegate{service.Open(Touch(root,"browser/chrome.exe"),null);},"browser executable cannot be treated as a game injection target");
             Assert(b.PrepareCount==beforePrepare,"browser selection is rejected before preparing components");
+            service.Open(game,6,null);Assert(b.Multipliers.Contains(6),"requested 6x reaches the game FG backend");
+            beforePrepare=b.PrepareCount;b.RejectFrameGen=true;
+            Throws(delegate{service.Open(other,6,null);},"unsupported native FG blocks launch");
+            Assert(b.PrepareCount==beforePrepare&&!b.Launched.Contains(other),"FG support is checked before preparing or installing components");
+            b.RejectFrameGen=false;Throws(delegate{service.Open(video,6,null);},"video cannot silently receive game-only MFG");
+            Assert(b.Multipliers.Contains(1),"default game route explicitly withdraws extra MFG");
+            string[] union=NativeSimpleActionsBackend.MergeTargets(new[]{game},new[]{game,other});Assert(union.Length==2,"cancel combines NR and FG records without duplicate targets");
 
             var f=new SimpleBackendFixture{FailPrepare=true};var failService=new SimpleActionService(Pending(root,"fail"),f);
             Throws(delegate{failService.Open(game,null);},"package preparation failure reaches the caller");Assert(f.Ensured.Count==0&&f.Launched.Count==0,"failed packages cannot install or launch");

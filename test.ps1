@@ -23,6 +23,10 @@ try {
     }
     Invoke-Check 'NeuralInstallerTests' @('src\NeuralInstaller.cs','tests\NeuralInstallerTests.cs') @('/reference:System.Xml.dll')
     Invoke-Check 'NeuralPresetsTests' @('src\NeuralPresets.cs','tests\NeuralPresetsTests.cs')
+    Invoke-Check 'FrameGenerationPresetsTests' @('src\FrameGenerationPresets.cs','tests\FrameGenerationPresetsTests.cs')
+    Invoke-Check 'FrameGenerationSupportTests' @('src\FrameGenerationSupport.cs','src\NeuralInstaller.cs','tests\FrameGenerationSupportTests.cs') @('/reference:System.Xml.dll')
+    Invoke-Check 'FrameGenerationInstallerTests' @('src\FrameGenerationInstaller.cs','src\FrameGenerationPresets.cs','src\NeuralInstaller.cs','tests\FrameGenerationInstallerTests.cs') @('/reference:System.Xml.dll')
+    Invoke-Check 'FrameGenerationPackagesTests' @('src\FrameGenerationPackages.cs','tests\FrameGenerationPackagesTests.cs')
     Invoke-Check 'NeuralLanguageTests' @('src\NeuralLanguage.cs','src\NeuralInstaller.cs','src\NeuralPresets.cs','tests\NeuralLanguageTests.cs') @('/reference:System.Xml.dll')
     Invoke-Check 'NeuralPackagesTests' @('src\NeuralPackages.cs','tests\NeuralPackagesTests.cs') @('/reference:System.IO.Compression.dll','/reference:System.IO.Compression.FileSystem.dll')
     $playbackSources=@('src\NeuralPlayback.cs','src\NeuralLanguage.cs','src\VideoSupport.cs','src\NeuralPackages.cs','src\NeuralInstaller.cs','src\NeuralPresets.cs')
@@ -30,7 +34,9 @@ try {
     Invoke-Check 'NeuralPlaybackTests' ($playbackSources+@('tests\NeuralPlaybackTests.cs')) $playbackRefs
     Invoke-Check 'PotPlayerSupportTests' ($playbackSources+@('src\PotPlayerSupport.cs','tests\PotPlayerSupportTests.cs')) $playbackRefs
     Invoke-Check 'WebVideoSupportTests' ($playbackSources+@('src\WebVideoSupport.cs','tests\WebVideoSupportTests.cs')) ($playbackRefs+@('/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll'))
-    Invoke-Check 'SimpleActionsTests' ($playbackSources+@('src\PotPlayerSupport.cs','src\WebVideoSupport.cs','src\SimpleActions.cs','tests\SimpleActionsTests.cs')) $playbackRefs
+    $fgSources=@('src\FrameGenerationPackages.cs','src\FrameGenerationPresets.cs','src\FrameGenerationSupport.cs','src\FrameGenerationInstaller.cs')
+    Invoke-Check 'SimpleActionsTests' ($playbackSources+$fgSources+@('src\PotPlayerSupport.cs','src\WebVideoSupport.cs','src\SimpleActions.cs','tests\SimpleActionsTests.cs')) $playbackRefs
+    Invoke-Check 'GameLaunchOptionsTests' @('src\GameLaunchOptions.cs','tests\GameLaunchOptionsTests.cs') @('/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll')
     & $compiler /nologo /target:exe /platform:x64 /langversion:5 /utf8output /define:SIMPLE_HOME_TEST_STUB /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /out:tests\SimpleHomeTests.exe src\SimpleHome.cs tests\SimpleHomeTests.cs
     if($LASTEXITCODE -ne 0){throw 'Simple home test compilation failed'}
     & '.\tests\SimpleHomeTests.exe'

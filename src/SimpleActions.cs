@@ -13,6 +13,7 @@ namespace RtxHub
         static readonly SimpleActionService Service=new SimpleActionService(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),@"Rtx4090MHub\simple-cancel-pending.xml"),new NativeSimpleActionsBackend());
         public static string Open(string selection,Action<string> progress){return Service.Open(selection,progress);}
         public static string OpenMany(string[] selections,Action<string> progress){if(selections!=null&&selections.Length==1)return Service.Open(selections[0],progress);return Service.OpenMany(selections,progress);}
+        public static string OpenMany(string[] selections,int multiplier,Action<string> progress){FrameGenerationPresets.ValidateMultiplier(multiplier);if(selections!=null&&selections.Length==1)return Service.Open(selections[0],multiplier,progress);if(multiplier!=1)throw new InvalidOperationException("游戏补帧请单独选择一个游戏程序。");return Service.OpenMany(selections,progress);}
         public static string OpenPotPlayer(Action<string> progress){return Service.OpenExtra(delegate(ISimpleActionsBackend backend){return backend.OpenPlayer();},progress);}
         public static string OpenBrowser(IntPtr window,Action<string> progress){return Service.OpenExtra(delegate(ISimpleActionsBackend backend){return backend.CaptureBrowser(window);},progress);}
         public static string CancelAll(Action<string> progress){return Service.CancelAll(progress);}
@@ -23,6 +24,7 @@ namespace RtxHub
     internal interface ISimpleActionsBackend
     {
         string Prepare(Action<string> progress); string EnsureGame(string exe); void LaunchGame(string exe);
+        void ValidateFrameGeneration(string exe,int multiplier);string ConfigureFrameGeneration(string exe,int multiplier,Action<string> progress);
         SimpleVideoLaunch PlayVideo(string video); SimpleVideoLaunch PlayVideos(string[] videos); SimpleVideoLaunch OpenPlayer(); SimpleVideoLaunch CaptureBrowser(IntPtr window); string[] ManagedTargets(); bool IsRunning(string exe);
         bool HasCoreFiles(string exe); string Restore(string exe); void StopOwnedPlayers(string[] targets,Action<string> progress);
     }
@@ -56,13 +58,19 @@ namespace RtxHub
             });
         }
         internal string Open(string selection,Action<string> progress)
+        {return Open(selection,1,progress);}
+        internal string Open(string selection,int multiplier,Action<string> progress)
         {
             return Locked(delegate
             {
+                FrameGenerationPresets.ValidateMultiplier(multiplier);
                 string target=CanonicalTarget(selection,true);string extension=Path.GetExtension(target);
                 bool game=String.Equals(extension,".exe",StringComparison.OrdinalIgnoreCase);
                 if(game&&WebVideoSupport.IsBrowserExecutable(target))throw new InvalidOperationException("网页视频请使用“网页视频”入口选择浏览器窗口。");
                 if(!game&&!IsVideo(extension))throw new InvalidOperationException("请选择游戏 .exe 或本地视频文件。");
+                if(!game&&multiplier!=1)throw new InvalidOperationException("本轮 2× 至 6× 补帧仅适用于游戏；视频仍使用原有画面增强。");
+                string[] related=new string[0];string launcher=target;
+                if(game){GamePlan(target,out related,out launcher);foreach(string exe in related)backend.ValidateFrameGeneration(exe,multiplier);}
                 Report(progress,"正在自动准备 NR 组件…");backend.Prepare(progress);
                 if(!game)
                 {
@@ -70,12 +78,12 @@ namespace RtxHub
                     if(launch!=null&&!String.IsNullOrEmpty(launch.Executable))ClearPending(new[]{launch.Executable});
                     return "已请求播放，使用均衡 NR 配置。\r\n"+(launch==null?"":launch.Message)+"\r\n实际 NR 是否执行以本次日志为准。";
                 }
-                string[] related;string launcher;GamePlan(target,out related,out launcher);
                 foreach(string exe in related){Report(progress,"正在准备游戏："+Path.GetFileName(Path.GetDirectoryName(exe)));Report(progress,backend.EnsureGame(exe));}
+                foreach(string exe in related)Report(progress,backend.ConfigureFrameGeneration(exe,multiplier,progress));
                 Report(progress,"正在启动游戏客户端…");
                 try{backend.LaunchGame(launcher);}catch(Exception ex){throw new InvalidOperationException("NR 组件已准备，但程序未能启动。可重试或点击取消增强。"+ex.Message,ex);}
                 ClearPending(related);
-                return "已准备均衡 NR 并请求启动游戏。\r\n"+launcher+"\r\n尚未确认游戏已加载 NR；实际画面和性能以游戏及本次日志为准。";
+                return (multiplier>1?"已请求启动游戏：NR + "+multiplier+"× 补帧；请在游戏内开启 DLSS 帧生成。":"已请求启动游戏：NR；本工具的额外补帧已关闭。")+"\r\n"+launcher+"\r\n"+FrameGenerationPresets.GetEvidenceSummary("",multiplier)+"\r\n尚未确认游戏已加载 NR；实际画面和性能以游戏及本次日志为准。";
             });
         }
         internal string CancelAll(Action<string> progress)
@@ -113,7 +121,7 @@ namespace RtxHub
             if(pending.Count==0)SavePending(pending);
             if(!explicitCancel&&!changed)return "";
             if(restored==0&&retained==0&&waiting==0&&failed==0)return explicitCancel?"没有需要撤回的 NR 安装；未改动其他文件。":"";
-            var summary=new StringBuilder("取消增强：已撤回 "+restored+" 个目标的 NR 加载组件。");
+            var summary=new StringBuilder("取消增强：已撤回 "+restored+" 个目标的画面增强与补帧加载组件。");
             if(retained>0)summary.Append(" ").Append(retained).Append(" 个目标含已改动组件，已保留供手动检查。");
             if(waiting>0)summary.Append(" ").Append(waiting).Append(" 个目标仍在运行，退出后自动撤回；不会强制关闭游戏或 PotPlayer。");
             if(failed>0)summary.Append(" ").Append(failed).Append(" 个目标暂未完成，将自动重试。");
@@ -197,6 +205,14 @@ namespace RtxHub
     {
         public string Prepare(Action<string> progress){return NeuralPackages.Prepare(progress);}
         public string EnsureGame(string exe){string result=NeuralInstaller.EnsureInstalled(exe,NeuralPackages.BundleDirectory,NeuralPresets.BuildGameIni(1));NeuralLanguage.ApplyChinese(exe);return result;}
+        public void ValidateFrameGeneration(string exe,int multiplier){if(multiplier>1){NeuralInstallService.ValidateGameForMod(exe,true);FrameGenerationSupport.Validate(exe);}}
+        public string ConfigureFrameGeneration(string exe,int multiplier,Action<string> progress)
+        {
+            if(multiplier==1)return FrameGenerationInstaller.Disable(exe);
+            FrameGenerationPackages.Prepare(progress);
+            string ini=FrameGenerationPresets.BuildIni(multiplier)+"\r\n[ProcessFilter]\r\nTargetProcessName="+Path.GetFileName(exe)+"\r\n";
+            return FrameGenerationInstaller.EnsureInstalled(exe,FrameGenerationPackages.BundleDirectory,ini);
+        }
         public void LaunchGame(string exe)
         {
             using(var process=Process.Start(new ProcessStartInfo(exe){UseShellExecute=true,WorkingDirectory=Path.GetDirectoryName(exe)}))
@@ -218,15 +234,16 @@ namespace RtxHub
         {
             string message=WebVideoSupport.Play(window,null);return new SimpleVideoLaunch{Executable=NeuralPlayback.LastPlayer,Message=message};
         }
-        public string[] ManagedTargets(){return NeuralInstaller.ManagedTargets();}
+        internal static string[] MergeTargets(string[] first,string[] second){var targets=new HashSet<string>(first,StringComparer.OrdinalIgnoreCase);targets.UnionWith(second);var list=new string[targets.Count];targets.CopyTo(list);Array.Sort(list,StringComparer.OrdinalIgnoreCase);return list;}
+        public string[] ManagedTargets(){return MergeTargets(NeuralInstaller.ManagedTargets(),FrameGenerationInstaller.ManagedTargets());}
         public bool IsRunning(string exe)
         {
             bool unknown=false;foreach(var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(exe)))using(process)
             {try{if(String.Equals(Path.GetFullPath(process.MainModule.FileName),exe,StringComparison.OrdinalIgnoreCase))return true;}catch(System.ComponentModel.Win32Exception){unknown=true;}catch(InvalidOperationException){}}
             return unknown; // Do not restore loaded files if a same-name process cannot be identified safely.
         }
-        public bool HasCoreFiles(string exe){string dir=Path.GetDirectoryName(exe);foreach(string file in new[]{"dxgi.dll","renodx-dlss5.addon64","nvngx_dlssnr.dll"})if(File.Exists(Path.Combine(dir,file)))return true;return false;}
-        public string Restore(string exe){return NeuralInstaller.Restore(exe);}
+        public bool HasCoreFiles(string exe){if(FrameGenerationInstaller.HasCoreFiles(exe))return true;string dir=Path.GetDirectoryName(exe);foreach(string file in new[]{"dxgi.dll","renodx-dlss5.addon64","nvngx_dlssnr.dll"})if(File.Exists(Path.Combine(dir,file)))return true;return false;}
+        public string Restore(string exe){var errors=new List<string>();string fg="",nr="";try{fg=FrameGenerationInstaller.Restore(exe);}catch(Exception ex){errors.Add(ex.Message);}try{nr=NeuralInstaller.Restore(exe);}catch(Exception ex){errors.Add(ex.Message);}if(errors.Count>0)throw new InvalidOperationException(String.Join("\r\n",errors.ToArray()));return fg+"\r\n"+nr;}
         internal static bool IsPrivatePlayerPath(string exe,string playerRoot)
         {
             string full=SimpleActionService.CanonicalTarget(exe,false);string root=Path.GetFullPath(playerRoot);

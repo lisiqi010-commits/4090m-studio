@@ -61,7 +61,7 @@ namespace RtxHub
             shell.Controls.Add(heading, 0, 0);
 
             Panel cards = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 14) };
-            open = new HomeCard("选择游戏或视频", "游戏 · PotPlayer · 网页视频\r\n自动加载中文画面增强", true);
+            open = new HomeCard("选择游戏或视频", "游戏补帧 1–6× · 中文增强\r\nPotPlayer · 网页视频", true);
             cancel = new HomeCard("取消全部注入", "运行中的程序退出后自动撤回\r\n等待期间请保持本窗口打开", false);
             open.TabIndex = 0;
             cancel.TabIndex = 1;
@@ -217,8 +217,13 @@ namespace RtxHub
                 ShowStatus("请选择一个游戏，或多段存在的本地视频。");
                 return;
             }
-            selected.Text = "已选择：" + Path.GetFileName(paths[0]) + (paths.Length > 1 ? " 等 " + paths.Length + " 段视频" : "");
-            await RunOperation(delegate(Action<string> progress) { return SimpleActions.OpenMany(paths, progress); }, "正在加载，请稍候…");
+            int multiplier=1;
+            if(paths.Length==1&&String.Equals(Path.GetExtension(paths[0]),".exe",StringComparison.OrdinalIgnoreCase))
+            {
+                int? choice=GameLaunchOptions.Select(this,paths[0]);if(!choice.HasValue)return;multiplier=choice.Value;
+            }
+            selected.Text = "已选择：" + Path.GetFileName(paths[0]) + (paths.Length > 1 ? " 等 " + paths.Length + " 段视频" : (multiplier>1?" · 请求 "+multiplier+"× 补帧":""));
+            await RunOperation(delegate(Action<string> progress) { return SimpleActions.OpenMany(paths, multiplier, progress); }, "正在加载，请稍候…");
         }
 
         async Task RunOperation(Func<Action<string>, string> operation, string initialStatus)

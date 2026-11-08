@@ -210,6 +210,7 @@ namespace RtxHub
     public enum SourceKind { Files, PotPlayer, Browser }
     public sealed class SourceSelection { public SourceKind Kind;public string[] Files;public IntPtr BrowserHandle; }
     public static class SourcePicker { public static SourceSelection Select(IWin32Window owner) { return null; } }
+    public static class GameLaunchOptions { public static int? Select(IWin32Window owner,string exe) { return 1; } }
     // Compile only this form and these tests with SIMPLE_HOME_TEST_STUB.
     // No executable, DLL, file, registry or network operation occurs here.
     public static class SimpleActions
@@ -227,6 +228,7 @@ namespace RtxHub
             return "已启动。";
         }
         public static string OpenMany(string[] selections, Action<string> progress) { return Open(selections[0],progress); }
+        public static string OpenMany(string[] selections,int multiplier,Action<string> progress) { return Open(selections[0],progress); }
         public static string OpenPotPlayer(Action<string> progress) { return Open("PotPlayer",progress); }
         public static string OpenBrowser(IntPtr handle,Action<string> progress) { return Open("browser",progress); }
         public static string CancelAll(Action<string> progress)

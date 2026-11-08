@@ -170,6 +170,14 @@ namespace RtxHub
             using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read)) using (var hash = SHA256.Create()) return Hex(hash.ComputeHash(stream));
         }
         internal static bool IsReparse(string path) { return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0; }
+        // Shared validation only; callers decide whether a read-only inspection
+        // must also require the target process to be stopped. NR behavior is unchanged.
+        internal static string ValidateGameForMod(string exe, bool requireNotRunning)
+        {
+            exe = CanonicalExe(exe, true); CheckX64(exe); CheckAntiCheat(Path.GetDirectoryName(exe));
+            if (requireNotRunning) CheckNotRunning(exe);
+            return exe;
+        }
         static string CanonicalLocal(string path)
         {
             if (String.IsNullOrWhiteSpace(path) || path.Length < 3 || path[1] != ':' || (path[2] != '\\' && path[2] != '/') || path.StartsWith(@"\\", StringComparison.Ordinal) || !Path.IsPathRooted(path)) throw new InvalidOperationException("请选择本机磁盘的完整路径；不支持网络、设备或相对路径。");
