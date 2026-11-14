@@ -7,7 +7,7 @@ try {
     $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
     function Invoke-Check([string]$name,[string[]]$sources,[string[]]$refs=@()) {
         $output=Join-Path $taskRoot ('tests\'+$name+'.exe')
-        $argsList=@('/nologo','/platform:x64','/langversion:5','/target:exe',('/main:'+$name),('/out:'+$output))+$refs+$sources
+        $argsList=@('/nologo','/platform:x64','/langversion:5','/codepage:65001','/target:exe',('/main:'+$name),('/out:'+$output))+$refs+$sources
         & $compiler @argsList
         if($LASTEXITCODE -ne 0){throw ($name+' compile failed')}
         & $output
@@ -37,12 +37,17 @@ try {
     $fgSources=@('src\FrameGenerationPackages.cs','src\FrameGenerationPresets.cs','src\FrameGenerationSupport.cs','src\FrameGenerationInstaller.cs')
     Invoke-Check 'SimpleActionsTests' ($playbackSources+$fgSources+@('src\PotPlayerSupport.cs','src\WebVideoSupport.cs','src\SimpleActions.cs','tests\SimpleActionsTests.cs')) $playbackRefs
     Invoke-Check 'GameLaunchOptionsTests' @('src\GameLaunchOptions.cs','tests\GameLaunchOptionsTests.cs') @('/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll')
-    & $compiler /nologo /target:exe /platform:x64 /langversion:5 /utf8output /define:SIMPLE_HOME_TEST_STUB /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /out:tests\SimpleHomeTests.exe src\SimpleHome.cs tests\SimpleHomeTests.cs
+    $optimizerSources = @(Get-ChildItem -LiteralPath '.\src\GameBoost' -Filter '*.cs' -File | ForEach-Object { $_.FullName })
+    $optimizerRefs = @('/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll','/reference:System.Xml.Linq.dll','/reference:Accessibility.dll')
+    & $compiler /nologo /target:exe /platform:x64 /langversion:5 /codepage:65001 /utf8output /define:SIMPLE_HOME_TEST_STUB /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Xml.Linq.dll /reference:Accessibility.dll /out:tests\SimpleHomeTests.exe src\SimpleHome.cs src\OptimizerWindow.cs $optimizerSources tests\SimpleHomeTests.cs
     if($LASTEXITCODE -ne 0){throw 'Simple home test compilation failed'}
     & '.\tests\SimpleHomeTests.exe'
     if($LASTEXITCODE -ne 0){throw 'Simple home tests failed'}
-    $allSources=@(Get-ChildItem -LiteralPath '.\src' -Filter '*.cs'|ForEach-Object {$_.FullName})+@('tests\UiTests.cs')
-    Invoke-Check 'UiTests' $allSources @('/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll','/reference:System.Xml.dll','/reference:System.Core.dll','/reference:System.IO.Compression.dll','/reference:System.IO.Compression.FileSystem.dll')
+    $allSources = @(Get-ChildItem -LiteralPath '.\src' -Filter '*.cs' -File -Recurse | ForEach-Object { $_.FullName })
+    $uiRefs = $optimizerRefs + @('/reference:System.Xml.dll','/reference:System.Core.dll','/reference:System.Management.dll','/reference:System.IO.Compression.dll','/reference:System.IO.Compression.FileSystem.dll')
+    Invoke-Check 'UiTests' ($allSources + @('tests\UiTests.cs')) $uiRefs
+    Invoke-Check 'GameBoost.EngineSmoke' @('src\GameBoost\GameProfiles.cs','src\GameBoost\OptimizationEngine.cs','tests\GameBoostEngineSmoke.cs') @('/reference:System.Xml.Linq.dll')
+    Invoke-Check 'OptimizerIntegrationTests' ($allSources + @('tests\OptimizerIntegrationTests.cs')) $uiRefs
     $render = Start-Process -FilePath (Join-Path $taskRoot '4090M-Studio.exe') -ArgumentList '--render' -WindowStyle Hidden -Wait -PassThru
     if ($render.ExitCode -ne 0) { throw 'UI render failed' }
     if($WithHardware) {

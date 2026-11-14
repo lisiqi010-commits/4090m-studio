@@ -47,9 +47,10 @@ public static class SimpleHomeTests
                 form.Show();
                 Application.DoEvents();
                 List<Button> buttons = Find<Button>(form);
-                Check(buttons.Count == 2, "Home must contain exactly two buttons.");
+                Check(buttons.Count == 3, "Home provides two media actions and the optimizer entry.");
                 Check(buttons[0].Text == "选择游戏或视频", "First action label.");
                 Check(buttons[1].Text == "取消全部注入", "Second action label.");
+                Check(buttons[2].Name == "OpenGameOptimizer", "Optimizer entry is on the home screen.");
                 foreach (Button button in buttons)
                 {
                     Check(button.AccessibleName == button.Text, "Accessible action name.");
@@ -72,7 +73,7 @@ public static class SimpleHomeTests
                     {
                         Rectangle bounds = form.RectangleToClient(button.RectangleToScreen(button.ClientRectangle));
                         Check(form.ClientRectangle.Contains(bounds), "Card stays inside window at " + size);
-                        Check(button.Width >= 260 && button.Height >= 180, "Cards remain large at " + size);
+                        if (button != buttons[2]) Check(button.Width >= 260 && button.Height >= 180, "Cards remain large at " + size);
                     }
                     Check(!buttons[0].Bounds.IntersectsWith(buttons[1].Bounds), "Action cards do not overlap.");
                     foreach (Label label in Find<Label>(form))
@@ -207,7 +208,7 @@ public static class SimpleHomeTests
             Check(form.Handle == originalHandle, "Hiding to tray preserves the native window handle.");
             Check(((System.Windows.Forms.Timer)Field(form, "pendingTimer")).Enabled, "Tray mode keeps pending cancellation active.");
             ContextMenuStrip menu = (ContextMenuStrip)Field(form, "trayMenu");
-            Check(menu.Items.Count == 2 && menu.Items[0].Text == "打开主窗口" && menu.Items[1].Text == "退出软件", "Chinese tray menu provides restore and exit.");
+            Check(menu.Items[0].Text == "打开主窗口" && menu.Items[1].Text == "游戏优化" && menu.Items[2].Text == "退出软件", "Chinese tray menu provides restore, optimizer and exit.");
             menu.Items[0].PerformClick();
             Application.DoEvents();
             Check(form.Visible && form.ShowInTaskbar && form.WindowState == FormWindowState.Normal && !tray.Visible, "Tray open restores the window and removes hidden icon.");
@@ -236,7 +237,7 @@ public static class SimpleHomeTests
         {
             startup.Show();Application.DoEvents();
             Check(!startup.Visible&&((NotifyIcon)Field(startup,"trayIcon")).Visible,"Startup launch hides in tray.");
-            ((ContextMenuStrip)Field(startup,"trayMenu")).Items[1].PerformClick();
+            ((ContextMenuStrip)Field(startup,"trayMenu")).Items[2].PerformClick();
             Check(startup.IsDisposed,"Tray exit explicitly closes even while hidden.");
         }
     }

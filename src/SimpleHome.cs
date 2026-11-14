@@ -16,6 +16,9 @@ namespace RtxHub
         readonly bool renderOnly;
         readonly HomeCard open;
         readonly HomeCard cancel;
+        readonly Button optimizerButton;
+        readonly string optimizerFolder;
+        readonly string optimizerEnabledFile;
         readonly Label selected;
         readonly Label status;
         readonly Label spinner;
@@ -26,13 +29,20 @@ namespace RtxHub
         bool busy;
         bool exitRequested;
         bool restoringFromTray;
+        bool stoppingOptimizer;
+        OptimizerWindow optimizer;
         Rectangle lastVisibleBounds;
         int animationFrame;
 
         public SimpleHome(bool renderOnly) : this(renderOnly, false) { }
-        public SimpleHome(bool renderOnly, bool startInTray)
+        public SimpleHome(bool renderOnly, bool startInTray) : this(renderOnly, startInTray,
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GameBoost")) { }
+
+        internal SimpleHome(bool renderOnly, bool startInTray, string optimizerFolder)
         {
             this.renderOnly = renderOnly;
+            this.optimizerFolder = optimizerFolder;
+            optimizerEnabledFile = Path.Combine(optimizerFolder, "studio-enabled");
             Text = "4090M Studio";
             ClientSize = new Size(860, 540);
             MinimumSize = new Size(676, 519);
@@ -48,6 +58,29 @@ namespace RtxHub
                 trayMenu = new ContextMenuStrip();
                 trayMenu.Items.Add("打开主窗口", null, delegate { RestoreFromTray(); });
                 trayMenu.Items.Add("退出软件", null, delegate { RequestExit(); });
+                trayMenu.Items.Insert(1, new ToolStripMenuItem("游戏优化", null, delegate
+                {
+                    RestoreFromTray();
+                    OpenOptimizer();
+                }));
+                var optimizerDivider = new ToolStripSeparator { Available = false };
+                var optimizerStatus = new ToolStripLabel { Available = false };
+                var optimizerToggle = new ToolStripMenuItem { Available = false };
+                optimizerToggle.Click += delegate
+                {
+                    if (optimizer != null && !stoppingOptimizer)
+                        optimizer.ToggleOptimization();
+                };
+                trayMenu.Items.AddRange(new ToolStripItem[] { optimizerDivider, optimizerStatus, optimizerToggle });
+                trayMenu.Opening += delegate
+                {
+                    optimizerDivider.Available = optimizerStatus.Available = optimizerToggle.Available = optimizer != null;
+                    if (optimizer == null) return;
+                    string text = optimizer.OptimizationStatus;
+                    optimizerStatus.Text = text.Length <= 52 ? text : text.Substring(0, 51) + "…";
+                    optimizerToggle.Text = optimizer.OptimizationEnabled ? "暂停优化并恢复优先级" : "继续游戏优化";
+                    optimizerToggle.Enabled = !stoppingOptimizer;
+                };
                 trayIcon = new NotifyIcon { Text = "4090M Studio", Icon = Icon, ContextMenuStrip = trayMenu, Visible = false };
                 trayIcon.DoubleClick += delegate { RestoreFromTray(); };
                 trayIcon.MouseClick += delegate(object sender, MouseEventArgs args)
@@ -130,7 +163,22 @@ namespace RtxHub
             status.TextAlign = ContentAlignment.MiddleLeft;
             state.Controls.Add(spinner);
             state.Controls.Add(status);
-            state.Resize += delegate { status.SetBounds(27, 6, Math.Max(1, state.ClientSize.Width - 27), 34); };
+            optimizerButton = new Button
+            {
+                Name = "OpenGameOptimizer", Text = "游戏优化…", AccessibleName = "游戏优化…",
+                AccessibleDescription = "打开资源监控、游戏配置和后台进程优化",
+                FlatStyle = FlatStyle.Flat, ForeColor = Foreground, BackColor = Color.FromArgb(36, 43, 50),
+                UseVisualStyleBackColor = false, TabIndex = 2
+            };
+            optimizerButton.FlatAppearance.BorderColor = Color.FromArgb(78, 93, 101);
+            optimizerButton.Click += delegate { OpenOptimizer(); };
+            state.Controls.Add(optimizerButton);
+            state.Resize += delegate
+            {
+                int buttonWidth = optimizerButton.GetPreferredSize(Size.Empty).Width + 24;
+                optimizerButton.SetBounds(state.ClientSize.Width - buttonWidth, 5, buttonWidth, state.ClientSize.Height - 10);
+                status.SetBounds(27, 6, Math.Max(1, optimizerButton.Left - 38), 34);
+            };
             shell.Controls.Add(state, 0, 3);
 
             Label footer = MakeLabel("选择即加载并启动；取消仅处理本工具管理的注入。", 8.5f, Muted, false);
@@ -167,7 +215,13 @@ namespace RtxHub
             open.AllowDrop = true;
             open.DragEnter += OnFileDragEnter;
             open.DragDrop += OnFileDrop;
-            Shown += delegate { if (!renderOnly) { pendingTimer.Start(); if(startInTray) WindowState=FormWindowState.Minimized; } };
+            Shown += delegate
+            {
+                if (renderOnly) return;
+                pendingTimer.Start();
+                if (File.Exists(optimizerEnabledFile)) StartOptimizer();
+                if (startInTray) WindowState = FormWindowState.Minimized;
+            };
             FormClosing += delegate(object sender, FormClosingEventArgs args)
             {
                 if (args.CloseReason == CloseReason.WindowsShutDown) return;
@@ -185,10 +239,75 @@ namespace RtxHub
                     WindowState = FormWindowState.Minimized;
                     return;
                 }
+                if (optimizer != null)
+                {
+                    args.Cancel = true;
+                    StopOptimizerAndExit();
+                }
             };
         }
 
         void RequestExit() { exitRequested = true; Close(); }
+
+        private OptimizerWindow StartOptimizer()
+        {
+            if (optimizer != null) return optimizer;
+            OptimizerWindow window = null;
+            try
+            {
+                window = new OptimizerWindow(optimizerFolder);
+                if (!File.Exists(optimizerEnabledFile)) File.WriteAllText(optimizerEnabledFile, String.Empty);
+                window.StartMonitoring();
+                optimizer = window;
+                return optimizer;
+            }
+            catch (Exception error)
+            {
+                if (window != null) window.Dispose();
+                ShowStatus("游戏优化启动失败。" + error.Message);
+                return null;
+            }
+        }
+
+        private void OpenOptimizer()
+        {
+            if (renderOnly || stoppingOptimizer) return;
+            OptimizerWindow window = StartOptimizer();
+            if (window != null) window.Open(this);
+        }
+
+        private async void StopOptimizerAndExit()
+        {
+            if (stoppingOptimizer) return;
+            stoppingOptimizer = true;
+            exitRequested = true;
+            pendingTimer.Stop();
+            open.Enabled = cancel.Enabled = optimizerButton.Enabled = false;
+            optimizer.Enabled = false;
+            ShowStatus("正在恢复后台进程优先级…");
+            await Task.Yield();
+            try
+            {
+                int remaining = await optimizer.StopMonitoringAsync();
+                if (remaining > 0) ShowOptimizerExitWarning("仍有 " + remaining + " 个进程的优先级待恢复，下次打开会重试。");
+            }
+            catch (Exception error)
+            {
+                ShowOptimizerExitWarning("恢复优先级时遇到错误。\n\n" + error.Message);
+            }
+            finally
+            {
+                optimizer.Dispose();
+                optimizer = null;
+                Close();
+            }
+        }
+
+        private void ShowOptimizerExitWarning(string message)
+        {
+            MessageBox.Show(Visible ? this : null, message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
             if (keyData == (Keys.Alt | Keys.F4) && !renderOnly) { RequestExit(); return true; }
@@ -286,7 +405,7 @@ namespace RtxHub
 
         async Task RunOperation(Func<Action<string>, string> operation, string initialStatus)
         {
-            if (busy || renderOnly) return;
+            if (busy || renderOnly || stoppingOptimizer) return;
             busy = true;
             open.Enabled = false;
             cancel.Enabled = false;
@@ -368,6 +487,7 @@ namespace RtxHub
                 if (animationTimer != null) animationTimer.Dispose();
                 if (trayIcon != null) { trayIcon.Visible = false; trayIcon.Dispose(); }
                 if (trayMenu != null) trayMenu.Dispose();
+                if (optimizer != null) optimizer.Dispose();
             }
             base.Dispose(disposing);
         }
